@@ -1,0 +1,24 @@
+# OpenProject 插件 bundle：向 profile 插入一条 Host 插件行。
+#
+# 注意：下面的 name 必须是**已发布的包名** —— Loader 就是按这个 specifier 去导入插件的。
+# 因为以 @ 开头，YAML 里必须加引号。
+#
+# 这里刻意不放任何机器相关配置。插件内置了可移植的默认值：
+#   - baseUrl 默认指向 Matrix 工作室的 OpenProject 实例
+#   - Token 依次从 config.token → config.tokenFile → DSH 凭据服务 → 环境变量读取
+#   - tokenFile 默认推导为 $DSH_HOME/openproject.token，换电脑无需改配置
+#
+# 需要覆盖默认值时，在你自己的 profile 的 cordis.patch.yml 里追加一条同名 id 的行即可
+# （profile 补丁层优先级高于 bundle 层，且 config 是整体替换而非深合并，所以要把
+#  需要保留的字段一并写全）：
+#
+#   - id: openproject
+#     name: "@koking0/dsh-plugin-openproject"
+#     config:
+#       baseUrl: 'https://your-openproject.example.com'
+#       rejectUnauthorized: true
+#       readOnly: false
+#
+- insert:
+    - id: openproject
+      name: "@koking0/dsh-plugin-openproject"

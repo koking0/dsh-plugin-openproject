@@ -1,0 +1,36 @@
+name: Publish to npm
+
+# 打 tag 即发布：git tag v1.0.0 && git push origin v1.0.0
+# 需要先在仓库 Secrets 里配置 NPM_TOKEN（npm 的 Automation Token）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # 支持 npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # 本插件零运行时依赖，无需 npm install 即可校验
+      - name: Syntax check
+        run: node --check index.js
+
+      - name: Show tarball contents
+        run: npm pack --dry-run
+
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
