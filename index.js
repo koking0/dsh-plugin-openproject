@@ -31,7 +31,13 @@ const PROMPT_SECTION_ORDER = 3150;
 
 /** 默认配置。 */
 export const DEFAULT_CONFIG = {
-  baseUrl: 'https://106.55.103.208:22560',
+  /**
+   * OpenProject 实例地址。
+   *
+   * 刻意**不设默认值**：本插件面向任意 OpenProject 部署，实例地址由使用方自行配置
+   * （环境变量 `OPENPROJECT_BASE_URL`，或 profile 补丁里的 `baseUrl`）。
+   */
+  baseUrl: '',
   /** 直接给出 Token（仅建议临时使用）。 */
   token: '',
   /** 从一个独立文件读取 Token；每次调用重新读取，便于轮换且不必重启。 */
@@ -94,12 +100,29 @@ export function normalizeConfig(raw) {
   for (const key of ['baseUrl', 'token', 'tokenFile', 'credentialRef']) {
     if (typeof merged[key] !== 'string') merged[key] = DEFAULT_CONFIG[key];
   }
-  // 便携默认值：Token 文件放在本机 DSH 主目录下，换电脑无需改配置。
-  if (merged.tokenFile.trim() === '') merged.tokenFile = defaultTokenFile();
-  // 允许用环境变量指定实例地址，便于在多个 OpenProject 环境间切换或在 CI 中使用。
+
+  /** 该字段是否由使用方显式配置（而非取默认值）。环境变量只在未显式配置时生效。 */
+  const configured = (key) => raw !== null && raw !== undefined && Object.hasOwn(raw, key);
+
+  // Token 文件：显式配置 > 环境变量 > 本机默认位置。
+  if (merged.tokenFile.trim() === '') {
+    const fromEnv = typeof process.env.OPENPROJECT_TOKEN_FILE === 'string'
+      ? process.env.OPENPROJECT_TOKEN_FILE.trim()
+      : '';
+    merged.tokenFile = fromEnv !== '' ? fromEnv : defaultTokenFile();
+  }
+
+  // 实例地址：环境变量 OPENPROJECT_BASE_URL（未显式配置时生效）。
   if (merged.baseUrl.trim() === '' && typeof process.env.OPENPROJECT_BASE_URL === 'string') {
     merged.baseUrl = process.env.OPENPROJECT_BASE_URL.trim();
   }
+
+  // 是否校验 TLS 证书：环境变量 OPENPROJECT_REJECT_UNAUTHORIZED（未显式配置时生效）。
+  if (!configured('rejectUnauthorized') && typeof process.env.OPENPROJECT_REJECT_UNAUTHORIZED === 'string') {
+    const flag = process.env.OPENPROJECT_REJECT_UNAUTHORIZED.trim().toLowerCase();
+    if (flag !== '') merged.rejectUnauthorized = flag === 'true' || flag === '1' || flag === 'yes';
+  }
+
   return merged;
 }
 

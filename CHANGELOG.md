@@ -21,17 +21,27 @@
 - 自动携带 `lockVersion`，并发修改会得到明确冲突提示而非静默覆盖。
 - `suppressNotifications` / `notify: false`：批量操作不发通知邮件。
 
+### 配置方式
+
+- **不预设任何实例地址**，由使用方配置，避免把具体部署信息带进公开包：
+  - 环境变量：`OPENPROJECT_BASE_URL`、`OPENPROJECT_API_TOKEN`、`OPENPROJECT_TOKEN_FILE`、`OPENPROJECT_REJECT_UNAUTHORIZED`
+  - 或 profile 补丁里的 `config.baseUrl` 等字段
+- Token 读取顺序：`config.token` → `config.tokenFile` → DSH 凭据服务 → 环境变量；
+  每次调用重新读取，轮换后无需重启。
+- 未配置实例地址时，工具会返回可操作的引导文案，而不是底层 URL 解析错误。
+
 ### 设计与实现说明
 
 - **零运行时依赖**：不使用任何第三方库，HTTP 走 `node:https`，因此可以精确控制自签名证书策略。
-- **不导出 `Config` schema**：避免依赖 `@deepseek-ai/schemastery` 而把插件绑定到特定 DSH 版本；
+- **不导出 `Config` schema**：避免依赖 DSH 内部包而把插件绑定到特定 DSH 版本；
   配置校验与默认值在 `normalizeConfig()` 中完成。
-- **可移植默认值**：Token 文件默认推导为 `$DSH_HOME/openproject.token`，换电脑安装后无需改配置。
+- **可移植默认值**：Token 文件默认推导为 `$DSH_HOME/openproject.token`，换电脑无需改配置。
 
 ### 已实测确认的实例特性
 
 - 时间记录筛选工作包的筛选器字段名是 `entity`（不是 `workPackage`）。
 - 工作包 `PATCH` 必须携带 `lockVersion`，否则一律返回 `409 UpdateConflict`。
 - `/form` 端点不校验全部必填项，`dryRun` 只作预览。
-- 时长的 ISO 8601 中 `P1D` 按实例的「每天工时」折算。
+- 时长的 ISO 8601 中 `1 天` 按实例的「每天工时」折算。
 - 类型上的 `isDefault` 表示「通用类型」而非「项目默认类型」。
+- 父级为自动排程时，新建子任务会被自动补出截止日期。

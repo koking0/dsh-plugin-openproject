@@ -1,6 +1,4 @@
-# dsh-plugin-openproject
-
-> npm 包名：`@koking0/dsh-plugin-openproject`
+# @liu_zhao_feng_alex/dsh-plugin-openproject
 
 把 **OpenProject** 接进 [DeepSeek Harness](https://www.deepseek.com/)（DSH）的原生插件：
 36 个中文工具，让你直接**用对话管理项目、工作包、工时、成员、版本与附件**。
@@ -12,6 +10,9 @@
 - 🛡️ **三层写入保护** —— 全局只读 → 项目白名单 → 删除强制二次确认
 - 🔍 **先预览后写入** —— 创建工作包/修改工作包支持 `dryRun`，先看服务端校验结果
 
+> 本插件**不预设任何 OpenProject 实例地址**，适用于任意自建或云端部署，装好后按下方
+> 「配置」一节填上你自己的地址与 Token 即可。
+
 > 为什么不用官方 MCP？OpenProject 官方 MCP 是 Enterprise 付费功能，Community Edition 上
 > `/mcp` 会返回 `MCP server is not available.`。社区 MCP 服务器（如 `openproject-ce-mcp`）
 > 虽可复用，但工具名为英文、数量上百、且需额外引入 Python 运行时。
@@ -20,81 +21,134 @@
 
 ## 安装
 
-在目标电脑上，任选一种方式：
-
 ### 1. 让 DSH 的 Agent 装（最省事）
 
 对 DSH 说一句：
 
-> 帮我安装插件 `@koking0/dsh-plugin-openproject`
+> 帮我安装插件 `@liu_zhao_feng_alex/dsh-plugin-openproject`
 
 Agent 会调用 `plugin_manager` 的 `install_bundle` 完成安装与注册。
 
 ### 2. 图形界面
 
-**设置 → 插件**（Settings → Plugins）里搜索并安装 `@koking0/dsh-plugin-openproject`。
+**设置 → 插件**（Settings → Plugins）里搜索并安装 `@liu_zhao_feng_alex/dsh-plugin-openproject`。
 
 ### 3. 命令行
 
 ```bash
 # 装进你的 profile（把 web 换成你实际使用的 profile 名）
-dsh plugin --profile web add @koking0/dsh-plugin-openproject
+dsh plugin --profile web add @liu_zhao_feng_alex/dsh-plugin-openproject
 ```
 
-安装后重启 DSH（或重载插件），对 DSH 说「**检查一下 OpenProject 连接**」，
-它会调用 `openproject_whoami` 自检。
+装完重启 DSH（或重载插件），然后**必须做下面的配置**，否则工具会提示未配置实例地址。
 
 ---
 
-## 配置
+# 配置
 
-### 第一步：准备 API Token（每人一份）
+## 第一步：拿到 API Token
 
 在 OpenProject 里：**我的账号 → 访问令牌 → 新建**，复制生成的 token。
 
-然后三选一（按优先级从高到低）：
+## 第二步：告诉插件连哪个实例
 
-| 方式 | 做法 | 适用场景 |
+**插件不预设实例地址，必须由你配置。** 下面两种方式任选一种即可。
+
+### 方式 A：环境变量（推荐，跨机器最省事）
+
+| 环境变量 | 必填 | 说明 |
 |---|---|---|
-| **凭据服务**（推荐） | 在 DSH 的凭据设置里保存名为 `OPENPROJECT_API_TOKEN` 的密钥 | 图形化、不落明文文件 |
-| **Token 文件** | 把 token 写入 `$DSH_HOME/openproject.token`（Windows 通常是 `C:\Users\<你>\.dsh\openproject.token`） | 便于脚本轮换 |
-| **环境变量** | 设置 `OPENPROJECT_API_TOKEN` | CI / 容器 |
+| `OPENPROJECT_BASE_URL` | ✅ | 你的 OpenProject 地址，例如 `https://openproject.example.com`（结尾不要带 `/`） |
+| `OPENPROJECT_API_TOKEN` | ✅ | 上一步拿到的 API Token |
+| `OPENPROJECT_TOKEN_FILE` | — | 改用文件存放 Token 时指定路径（覆盖默认位置） |
+| `OPENPROJECT_REJECT_UNAUTHORIZED` | — | `true` 时校验证书；**自签名证书的实例用 `false`（默认即 false）** |
 
-> Token 会在**每次调用时重新读取**，所以轮换后无需重启 DSH。
+各系统写法：
 
-### 第二步：按需覆盖默认配置
+```powershell
+# Windows PowerShell（仅当前会话）
+$env:OPENPROJECT_BASE_URL = 'https://openproject.example.com'
+$env:OPENPROJECT_API_TOKEN = 'opapi-xxxxxxxx'
 
-插件默认指向 Matrix 工作室的 OpenProject 实例，通常只需配 Token 即可。
-要换实例或调整行为，在**你自己 profile 的 `cordis.patch.yml`** 里追加：
+# Windows 永久生效（新开终端后有效）
+setx OPENPROJECT_BASE_URL "https://openproject.example.com"
+setx OPENPROJECT_API_TOKEN "opapi-xxxxxxxx"
+```
+
+```bash
+# macOS / Linux
+export OPENPROJECT_BASE_URL='https://openproject.example.com'
+export OPENPROJECT_API_TOKEN='opapi-xxxxxxxx'
+```
+
+也可以用 `.env` 文件（DSH 会读取 `$DSH_HOME/.env` 与项目根目录的 `.env`）：
+
+```dotenv
+OPENPROJECT_BASE_URL=https://openproject.example.com
+OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
+```
+
+> 环境变量只在**你没有在配置里显式写该字段**时生效，因此不会被旧配置意外覆盖。
+
+### 方式 B：profile 配置（不想用环境变量时）
+
+在**你自己 profile 的 `cordis.patch.yml`** 里追加：
 
 ```yaml
 - id: openproject
-  name: "@koking0/dsh-plugin-openproject"
+  name: "@liu_zhao_feng_alex/dsh-plugin-openproject"
   config:
-    baseUrl: 'https://your-openproject.example.com'
-    rejectUnauthorized: true     # 实例使用受信任证书时打开校验
+    baseUrl: 'https://openproject.example.com'
+    # 自签名证书实例保持 false；有受信任证书时改为 true
+    rejectUnauthorized: false
+    # Token 也可以直接读文件（每次调用重新读取，便于轮换）
+    tokenFile: '/home/you/.dsh/openproject.token'
+    # 凭据服务中的引用名（默认值）
+    credentialRef: 'OPENPROJECT_API_TOKEN'
     readOnly: false
-    writeProjects: []            # 填项目标识可把写入限制在指定项目
+    # 只想允许在特定项目里写入时，填项目标识或 ID
+    writeProjects: []
 ```
 
-> 注意：profile 补丁层会**整体替换** `config`，不是深合并，所以要把需要保留的字段一并写全。
+> ⚠️ profile 补丁层会**整体替换** `config`（不是深合并），所以要把需要保留的字段一并写全。
 
-### 配置项
+### 方式 C：DSH 凭据服务
+
+在 DSH 的凭据设置里保存一个名为 `OPENPROJECT_API_TOKEN` 的密钥即可，
+插件会通过 `credentialRef` 自动读取，无需落明文文件。
+
+### Token 的读取顺序
+
+`config.token` → `config.tokenFile` → DSH 凭据服务 → 环境变量。
+**每次调用都会重新读取**，所以轮换 Token 后无需重启 DSH。
+
+### 配置项一览
 
 | 字段 | 默认值 | 说明 |
 |---|---|---|
-| `baseUrl` | `https://106.55.103.208:22560` | OpenProject 实例地址，也可用环境变量 `OPENPROJECT_BASE_URL` 指定 |
-| `token` | — | 直接给出 Token（仅建议临时使用） |
-| `tokenFile` | `$DSH_HOME/openproject.token` | Token 文件路径，自动按本机主目录推导 |
+| `baseUrl` | **（空，必填）** | OpenProject 实例地址；也可由 `OPENPROJECT_BASE_URL` 提供 |
+| `token` | — | 直接给出 Token（不建议，容易进版本库） |
+| `tokenFile` | `$DSH_HOME/openproject.token` | Token 文件路径，按本机主目录自动推导 |
 | `credentialRef` | `OPENPROJECT_API_TOKEN` | DSH 凭据服务中的引用名 |
-| `rejectUnauthorized` | `false` | 是否校验 TLS 证书；自签名实例保持 `false` |
+| `rejectUnauthorized` | `false` | 是否校验 TLS 证书 |
 | `requestTimeoutMs` | `30000` | 单次请求超时 |
 | `defaultPageSize` / `maxPageSize` | `25` / `100` | 分页大小 |
-| `hoursPerDay` | `8` | 解析 ISO 8601 时长时 `P1D` 折算的小时数 |
+| `hoursPerDay` | `8` | 解析 ISO 8601 时长时 `1 天` 折算的小时数 |
 | `readOnly` | `false` | 全局只读开关，开启后拒绝一切写入 |
 | `requireConfirmForWrites` | `false` | 为 `true` 时所有写入都要求 `confirm: true` |
 | `suppressNotifications` | `false` | 为 `true` 时工作包写入默认不发通知邮件 |
 | `writeProjects` | `[]` | 写入白名单（项目 ID/标识/名称），为空表示不限制 |
+
+## 第三步：验证
+
+对 DSH 说「**检查一下 OpenProject 连接**」，它会调用 `openproject_whoami`，
+正常会返回你的账号名与实例地址：
+
+```
+已连接 OpenProject：https://openproject.example.com
+当前账号：#12 张三（zhangsan） · 管理员
+写入状态：允许写入
+```
 
 ---
 
@@ -148,23 +202,8 @@ dsh plugin --profile web add @koking0/dsh-plugin-openproject
 - **先读后写**：字典类工具（状态、类型、优先级、角色、活动类型）让模型先取真实取值。
 - **干运行**：给创建工作包/修改工作包传 `dryRun: true`，经服务端表单端点校验并回显将提交的内容。
 - **乐观锁**：更新工作包时自动带上刚读到的 `lockVersion`；期间若有人改过会返回明确的冲突提示。
-- **零依赖**：不 import 任何 `@deepseek-ai/*` 包，因此不绑定具体 DSH 版本，也不受
-  包管理器的模块解析方式影响。
-
----
-
-## 已知的 OpenProject 实例行为
-
-以下都是实测确认、写插件时最容易踩的点，记录下来备查：
-
-1. **时间记录筛选工作包用 `entity`**，不是 `workPackage`（后者报「筛选器不存在」）。
-   但资源链接里两者同时存在。
-2. **工作包 `PATCH` 必须携带 `lockVersion`**，否则一律返回 `409 UpdateConflict`。
-3. **`/form` 端点不校验全部必填项**：空标题在表单端点无报错，因此 `dryRun` 只作预览，
-   不能当作「一定可创建」的保证；插件已在客户端补上必填校验。
-4. **`hours` 是 ISO 8601 duration**，且 `P1D` 按实例的 `hoursPerDay` 折算。
-5. **类型上的 `isDefault` 表示「通用类型」而非「项目默认类型」**，展示时不予采用。
-6. **父级为自动排程时，新建子任务会被自动补出截止日期**。
+- **零依赖**：不 import 任何 DSH 内部包，因此不绑定具体 DSH 版本，也不受包管理器
+  模块解析方式影响。
 
 ---
 
@@ -172,18 +211,31 @@ dsh plugin --profile web add @koking0/dsh-plugin-openproject
 
 | 现象 | 原因与处理 |
 |---|---|
-| 「未配置 OpenProject API Token」 | 按上文任选一种方式提供 Token；也可先调用 `openproject_whoami` 确认 |
-| 连接失败 / 自签名证书被拒 | 确认 `rejectUnauthorized: false`，或为该实例安装受信任证书 |
-| `failed to import` | 插件以链接方式安装且宿主环境无法解析 `@deepseek-ai/*` 时会出现；本插件零依赖，正常安装不会触发 |
+| 「未配置 OpenProject 实例地址」 | 按上方「配置 → 第二步」设置 `OPENPROJECT_BASE_URL` 或 profile 的 `baseUrl` |
+| 「未配置 OpenProject API Token」 | 设置 `OPENPROJECT_API_TOKEN`，或写入 `$DSH_HOME/openproject.token`，或用凭据服务 |
+| 连接失败 / 证书被拒 | 自签名证书实例需 `rejectUnauthorized: false`（或 `OPENPROJECT_REJECT_UNAUTHORIZED=false`） |
 | 401 / 403 | Token 失效或无权限，重新生成 Token |
 | 更新返回 409 冲突 | 有人在你读取之后改过该工作包，重新读取后再改（插件已内置该提示） |
+
+## 已知的 OpenProject 行为（实测）
+
+这些是写插件时踩过的坑，供二次开发参考：
+
+1. **时间记录筛选工作包用 `entity`** 而不是 `workPackage`（后者报「筛选器不存在」）；
+   但资源链接里两者同时存在。
+2. **工作包 `PATCH` 必须携带 `lockVersion`**，否则一律返回 `409 UpdateConflict`。
+3. **`/form` 端点不校验全部必填项**，因此 `dryRun` 只作预览；插件已在客户端补上必填校验。
+4. **`hours` 是 ISO 8601 duration**，且 `1 天` 按实例的 `hoursPerDay` 折算。
+5. **类型上的 `isDefault` 表示「通用类型」而非「项目默认类型」**。
+6. **父级为自动排程时，新建子任务会被自动补出截止日期**。
 
 ---
 
 ## 开发
 
 ```bash
-git clone <repo> && cd dsh-openproject-plugin
+git clone https://github.com/koking0/dsh-plugin-openproject.git
+cd dsh-plugin-openproject
 # 无需安装依赖：本插件零运行时依赖
 node --check index.js    # 语法检查
 npm pack --dry-run       # 查看将发布的文件清单
@@ -199,6 +251,13 @@ lib/api.js            OpenProject API 层：鉴权、分页、HAL、名字解析
 lib/guard.js          写入保护
 lib/format.js         面向模型的紧凑中文渲染
 lib/tools/*.js        按能力域拆分的工具定义（含内联的 defineTool 实现）
+```
+
+发布新版本：改 `package.json` 的 `version` 与 `CHANGELOG.md`，然后
+
+```bash
+npm publish --access public
+# 或打 tag 由 GitHub Actions 自动发布：git tag v1.0.1 && git push origin v1.0.1
 ```
 
 ## 许可
