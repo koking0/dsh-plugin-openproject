@@ -8,7 +8,7 @@
 ### 新增
 
 - **多实例支持**：同一个 profile 可以同时接入多个 OpenProject（例如「实验室」与
-  「速知启智」），在 profile 补丁里用不同的 `id` 插入多条本插件即可。新增两个配置项：
+  「团队 B」），在 profile 补丁里用不同的 `id` 插入多条本插件即可。新增两个配置项：
   - `toolPrefix`：工具名前缀（如 `lab_`），本实例的 `openproject_list_projects` 会注册成
     `lab_list_projects`，从而与其它实例共存；填 `lab` 会自动补成 `lab_`，形状非法时
     **直接报错**（静默忽略会导致同名工具互相覆盖，比加载失败更难排查）。

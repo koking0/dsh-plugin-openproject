@@ -119,7 +119,7 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 
 ### 方式 D：同时接入多个实例（多实例）
 
-同一个 profile 可以同时接入多个 OpenProject（例如「实验室」和「速知启智」）：
+同一个 profile 可以同时接入多个 OpenProject（例如「实验室」和「团队 B」）：
 在 profile 的 `cordis.patch.yml` 里用**不同的 `id` 插入多条本插件**，每条配一个
 `toolPrefix` 与 `label`。
 
@@ -135,17 +135,17 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 
 # 实例二：新增一条 insert，id 必须与上面不同
 - insert:
-    - id: openproject-secknow
+    - id: openproject-corp
       name: "@liu_zhao_feng_alex/dsh-plugin-openproject"
       config:
-        label: '速知启智'
-        toolPrefix: 'secknow_'
-        baseUrl: 'https://openproject.secknow-ai.com'
-        tokenFile: '/home/you/.dsh/openproject.secknow.token'
+        label: '团队 B'
+        toolPrefix: 'corp_'
+        baseUrl: 'https://openproject.example.com'
+        tokenFile: '/home/you/.dsh/openproject.corp.token'
 ```
 
 - **`toolPrefix` 决定工具名前缀**：实验室的 `openproject_list_projects` 会注册成
-  `lab_list_projects`，速知启智的是 `secknow_list_projects`，因此同一个对话里两边的工具
+  `lab_list_projects`，团队 B 的是 `corp_list_projects`，因此同一个对话里两边的工具
   可以共存。**多个实例必须用不同的前缀**；填 `lab` 会自动补成 `lab_`。前缀只允许字母、
   数字与下划线且以字母开头，形状非法时插件会**直接报错**而不是静默忽略。
 - **`label` 是实例的人类可读名称**，会出现在系统提示词与每个工具描述的前缀里
@@ -201,7 +201,7 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 
 ```
 已连接 OpenProject（实验室）：https://openproject.lab.example.com
-当前账号：#35 刘兆峰（ZhaofengLiu） · 管理员
+当前账号：#12 张三（zhangsan） · 管理员
 写入状态：允许写入
 工具名前缀：lab_（本实例工具名形如 lab_openproject_list_projects）
 ```
