@@ -117,10 +117,54 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 在 DSH 的凭据设置里保存一个名为 `OPENPROJECT_API_TOKEN` 的密钥即可，
 插件会通过 `credentialRef` 自动读取，无需落明文文件。
 
+### 方式 D：同时接入多个实例（多实例）
+
+同一个 profile 可以同时接入多个 OpenProject（例如「实验室」和「速知启智」）：
+在 profile 的 `cordis.patch.yml` 里用**不同的 `id` 插入多条本插件**，每条配一个
+`toolPrefix` 与 `label`。
+
+```yaml
+# 实例一：覆盖 bundle 层已经插入的那条（id 固定为 openproject）
+- id: openproject
+  name: "@liu_zhao_feng_alex/dsh-plugin-openproject"
+  config:
+    label: '实验室'
+    toolPrefix: 'lab_'
+    baseUrl: 'https://openproject.lab.example.com'
+    tokenFile: '/home/you/.dsh/openproject.lab.token'
+
+# 实例二：新增一条 insert，id 必须与上面不同
+- insert:
+    - id: openproject-secknow
+      name: "@liu_zhao_feng_alex/dsh-plugin-openproject"
+      config:
+        label: '速知启智'
+        toolPrefix: 'secknow_'
+        baseUrl: 'https://openproject.secknow-ai.com'
+        tokenFile: '/home/you/.dsh/openproject.secknow.token'
+```
+
+- **`toolPrefix` 决定工具名前缀**：实验室的 `openproject_list_projects` 会注册成
+  `lab_list_projects`，速知启智的是 `secknow_list_projects`，因此同一个对话里两边的工具
+  可以共存。**多个实例必须用不同的前缀**；填 `lab` 会自动补成 `lab_`。前缀只允许字母、
+  数字与下划线且以字母开头，形状非法时插件会**直接报错**而不是静默忽略。
+- **`label` 是实例的人类可读名称**，会出现在系统提示词与每个工具描述的前缀里
+  （如 `[实验室] 列出 OpenProject 中当前账号可见的项目`），让模型按你提到的组织选对实例。
+  实例地址若是 IP 或域名，模型光看地址认不出是哪个组织，建议配合 `label` 使用。
+- 每个实例的 `readOnly`、`writeProjects`、`requireConfirmForWrites`、Token 来源（
+  `token` / `tokenFile` / `credentialRef`）都独立生效。
+- 不配 `toolPrefix` 时行为与单实例完全一致：工具名仍是 `openproject_*`，提示词区块也不变。
+
+> 如果希望实例之间隔离得更彻底（例如一个只读、一个可写，且不想让模型同时看到两边），
+> 也可以给每个实例各建一个 DSH profile：`dsh --from-default-profile <模板>`。
+
 ### Token 的读取顺序
 
 `config.token` → `config.tokenFile` → DSH 凭据服务 → 环境变量。
 **每次调用都会重新读取**，所以轮换 Token 后无需重启 DSH。
+
+> 多实例场景下建议每个实例用**各自的 `tokenFile`**（或各自的 `credentialRef`）：
+> `config.token` 与 `OPENPROJECT_API_TOKEN` 这类单值来源无法区分实例。
 
 ### 配置项一览
 
@@ -130,6 +174,8 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 | `token` | — | 直接给出 Token（不建议，容易进版本库） |
 | `tokenFile` | `$DSH_HOME/openproject.token` | Token 文件路径，按本机主目录自动推导 |
 | `credentialRef` | `OPENPROJECT_API_TOKEN` | DSH 凭据服务中的引用名 |
+| `label` | `''` | 实例名称（如「实验室」），用于提示词与工具描述前缀，便于区分多实例 |
+| `toolPrefix` | `''` | 工具名前缀（如 `lab_`），多实例时用于区分各实例的工具；自动补结尾下划线 |
 | `rejectUnauthorized` | `false` | 是否校验 TLS 证书 |
 | `requestTimeoutMs` | `30000` | 单次请求超时 |
 | `defaultPageSize` / `maxPageSize` | `25` / `100` | 分页大小 |
@@ -141,7 +187,8 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 
 ## 第三步：验证
 
-对 DSH 说「**检查一下 OpenProject 连接**」，它会调用 `openproject_whoami`，
+对 DSH 说「**检查一下 OpenProject 连接**」，它会调用 `openproject_whoami`
+（多实例时是 `<前缀>openproject_whoami`，例如 `lab_openproject_whoami`），
 正常会返回你的账号名与实例地址：
 
 ```
@@ -150,9 +197,21 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 写入状态：允许写入
 ```
 
+配置了 `label` / `toolPrefix` 时还会带上它们，多实例场景下一眼就能确认打到了哪个实例：
+
+```
+已连接 OpenProject（实验室）：https://openproject.lab.example.com
+当前账号：#35 刘兆峰（ZhaofengLiu） · 管理员
+写入状态：允许写入
+工具名前缀：lab_（本实例工具名形如 lab_openproject_list_projects）
+```
+
 ---
 
 ## 工具清单（36 个）
+
+> 下表按默认前缀 `openproject_` 列出。用[方式 D](#方式-d同时接入多个实例多实例)配置
+> `toolPrefix` 后，本实例的工具名会变成 `<前缀>openproject_*`（例如 `lab_list_projects`）。
 
 **连接与项目**
 `openproject_whoami` · `openproject_list_projects` · `openproject_get_project` ·
@@ -216,6 +275,9 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 | 连接失败 / 证书被拒 | 自签名证书实例需 `rejectUnauthorized: false`（或 `OPENPROJECT_REJECT_UNAUTHORIZED=false`） |
 | 401 / 403 | Token 失效或无权限，重新生成 Token |
 | 更新返回 409 冲突 | 有人在你读取之后改过该工作包，重新读取后再改（插件已内置该提示） |
+| 报「toolPrefix 非法」 | 前缀只允许字母、数字、下划线且以字母开头（如 `lab_`）；多实例时必须各不相同，否则同名工具会互相覆盖 |
+| 多实例时只有其中一个生效 | 检查两条 insert 的 `id` 是否不同、`toolPrefix` 是否不同；插件加载失败会在插件页显示为 import 错误 |
+| 模型调错实例 | 给每条配置补上 `label`（如「实验室」）；IP 或域名形式的 `baseUrl` 模型认不出对应哪个组织 |
 
 ## 已知的 OpenProject 行为（实测）
 

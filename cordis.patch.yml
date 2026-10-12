@@ -20,6 +20,20 @@
 #       rejectUnauthorized: true
 #       readOnly: false
 #
+# 多实例（同一个 profile 同时接入多个 OpenProject）：再追加一条 insert，用不同的 id
+# 和不同的 toolPrefix，例如：
+#
+#   - insert:
+#       - id: openproject-secknow
+#         name: "@liu_zhao_feng_alex/dsh-plugin-openproject"
+#         config:
+#           label: '速知启智'
+#           toolPrefix: 'secknow_'
+#           baseUrl: 'https://openproject.secknow-ai.com'
+#
+# toolPrefix 决定工具名（lab_ + openproject_list_projects → lab_list_projects），
+# label 会进入系统提示词与工具描述。详见 README「方式 D：同时接入多个实例」。
+#
 - insert:
     - id: openproject
       name: "@liu_zhao_feng_alex/dsh-plugin-openproject"

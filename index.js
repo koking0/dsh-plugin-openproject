@@ -44,6 +44,20 @@ export const DEFAULT_CONFIG = {
   tokenFile: '',
   /** 交由 DSH 凭据服务解析的引用名。 */
   credentialRef: 'OPENPROJECT_API_TOKEN',
+  /**
+   * 实例名称（人类可读），例如「实验室」「速知启智」。
+   *
+   * 同一个 profile 接入多个实例时，它会出现在系统提示词和每个工具的描述前缀里
+   * （如 `[实验室] 列出……`），让模型按用户提到的组织选对实例。
+   */
+  label: '',
+  /**
+   * 工具名前缀，例如 `lab_`：本实例的 `openproject_list_projects` 会注册成
+   * `lab_list_projects`，从而在同一个 profile 里与其它实例共存。
+   *
+   * 未设置时保持原来的 `openproject_` 前缀（单实例用法完全不变）。
+   */
+  toolPrefix: '',
   /** 自签名证书实例需要设为 false。 */
   rejectUnauthorized: false,
   requestTimeoutMs: 30000,
@@ -97,9 +111,11 @@ export function normalizeConfig(raw) {
   }
   const allow = Array.isArray(merged.writeProjects) ? merged.writeProjects : [];
   merged.writeProjects = allow.map((value) => String(value).trim()).filter((value) => value.length > 0);
-  for (const key of ['baseUrl', 'token', 'tokenFile', 'credentialRef']) {
+  for (const key of ['baseUrl', 'token', 'tokenFile', 'credentialRef', 'label', 'toolPrefix']) {
     if (typeof merged[key] !== 'string') merged[key] = DEFAULT_CONFIG[key];
   }
+  // 工具名前缀需要补分隔符并校验形状：静默忽略会让多实例互相覆盖，比加载失败更难查。
+  merged.toolPrefix = normalizeToolPrefix(merged.toolPrefix);
 
   /** 该字段是否由使用方显式配置（而非取默认值）。环境变量只在未显式配置时生效。 */
   const configured = (key) => raw !== null && raw !== undefined && Object.hasOwn(raw, key);
@@ -124,6 +140,58 @@ export function normalizeConfig(raw) {
   }
 
   return merged;
+}
+
+/**
+ * 规范化工具名前缀。
+ *
+ * 自动补上结尾的下划线（`lab` → `lab_`），这样 `lab_` + `openproject_list_projects`
+ * 读起来自然。形状非法时**直接抛错**：静默忽略会让同 profile 里的多实例注册出同名
+ * 工具而互相覆盖，那种故障比加载失败难排查得多。
+ *
+ * @param {string} value - 原始前缀。
+ * @returns {string} 规范化后的前缀；未配置时返回空串。
+ */
+export function normalizeToolPrefix(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (raw === '') return '';
+  const withSeparator = raw.endsWith('_') ? raw : `${raw}_`;
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(withSeparator)) {
+    throw new Error(
+      `toolPrefix 非法：${JSON.stringify(raw)}；只允许字母、数字与下划线，且以字母开头（例如 "lab_"）。`,
+    );
+  }
+  return withSeparator;
+}
+
+/**
+ * 构造「带工具名前缀与实例标签」的插件上下文。
+ *
+ * 同一个 profile 里插入多条本插件（不同 id、不同 `toolPrefix`）即可同时接入多个
+ * OpenProject 实例。已发布包的模块只会被求值一次，两个实例**共享同一个 ESM 模块**，
+ * 所以前缀绝不能存放在模块级变量里（会互相串台）；这里改为在注册边界上逐条改写定义。
+ *
+ * 工具模块只用到 `ctx.tools.register`（共 35 处），因此用原型链转发其余属性即可，
+ * 不必逐个改动工具模块。
+ *
+ * @param {object} ctx - 原始插件上下文。
+ * @param {string} prefix - 已规范化的工具名前缀（可为空）。
+ * @param {string} label - 实例名称（可为空）。
+ * @returns {object} 供工具模块使用的上下文。
+ */
+function instanceContext(ctx, prefix, label) {
+  if (!prefix && !label) return ctx;
+  const tag = label ? `[${label}] ` : '';
+  const tools = Object.create(ctx.tools, {
+    register: {
+      value: (definition) => ctx.tools.register({
+        ...definition,
+        ...(prefix ? { name: `${prefix}${definition.name}` } : {}),
+        ...(tag ? { description: `${tag}${definition.description}` } : {}),
+      }),
+    },
+  });
+  return Object.create(ctx, { tools: { value: tools } });
 }
 
 /**
@@ -177,13 +245,19 @@ export function apply(ctx, rawConfig) {
   const guard = createGuard({ config });
   const deps = { api, guard, config, resolveToken };
 
-  registerProjectTools(ctx, deps);
-  registerWorkPackageTools(ctx, deps);
-  registerTimeTools(ctx, deps);
-  registerMemberTools(ctx, deps);
-  registerAttachmentTools(ctx, deps);
+  /**
+   * 多实例：本实例的全部工具（含 whoami）都经由带前缀的上下文注册。
+   * 未配置 `toolPrefix` / `label` 时 `instanceContext()` 原样返回 ctx，行为与 1.0.0 一致。
+   */
+  const toolCtx = instanceContext(ctx, config.toolPrefix, config.label);
 
-  ctx.tools.register(textTool({
+  registerProjectTools(toolCtx, deps);
+  registerWorkPackageTools(toolCtx, deps);
+  registerTimeTools(toolCtx, deps);
+  registerMemberTools(toolCtx, deps);
+  registerAttachmentTools(toolCtx, deps);
+
+  toolCtx.tools.register(textTool({
     name: 'openproject_whoami',
     description: '检查 OpenProject 连接是否正常，并返回当前 Token 对应的账号：用户 ID、姓名、登录名与是否为管理员。'
       + '在开始其它操作前可以用它确认连接与权限。',
@@ -194,16 +268,21 @@ export function apply(ctx, rawConfig) {
       const response = await api.request.get('/api/v3/configuration');
       const me = await api.request.get('/api/v3/users/me');
       const lines = [
-        `已连接 OpenProject：${config.baseUrl}`,
+        `已连接 OpenProject${config.label ? `（${config.label}）` : ''}：${config.baseUrl}`,
         `当前账号：#${me.id} ${me.name}（${me.login}）${me.admin ? ' · 管理员' : ''}`,
         `实例设置：每天 ${config.hoursPerDay} 小时、每周起始日 ${response.startOfWeek ?? '未设置'}`,
         `写入状态：${guard.readOnly ? '只读模式（config.readOnly = true）' : '允许写入'}`,
         `目标时区：${response.userDefaultTimezone ?? '未设置'}`,
+        ...(config.toolPrefix
+          ? [`工具名前缀：${config.toolPrefix}（本实例工具名形如 ${config.toolPrefix}openproject_list_projects）`]
+          : []),
       ];
       return {
         text: lines.join('\n'),
         data: {
           baseUrl: config.baseUrl,
+          label: config.label || null,
+          toolPrefix: config.toolPrefix || null,
           user: { id: me.id, name: me.name, login: me.login, admin: me.admin === true },
           readOnly: guard.readOnly,
           hoursPerDay: config.hoursPerDay,
@@ -212,21 +291,36 @@ export function apply(ctx, rawConfig) {
     },
   }));
 
+  /**
+   * 每个实例注册自己的提示词区块，因此区块名必须唯一：区块名相同时后注册的实例会
+   * 覆盖前一个的文案，导致模型只看到其中一个实例。
+   *
+   * 未配置 `toolPrefix` 时沿用 1.0.0 的 `plugin:openproject`，保持单实例行为不变。
+   */
+  const sectionName = config.toolPrefix
+    ? `plugin:openproject:${config.toolPrefix.replace(/_+$/, '')}`
+    : 'plugin:openproject';
+  const toolNamePrefix = `${config.toolPrefix}openproject_`;
   ctx.systemPrompt.section({
-    name: 'plugin:openproject',
+    name: sectionName,
     order: PROMPT_SECTION_ORDER,
     text: () => {
       const mode = guard.readOnly
         ? '当前为只读模式，写入类工具会直接拒绝。'
         : '写入类工具可用；删除类操作必须显式传 confirm: true。';
       return [
-        '## OpenProject 项目管理',
-        `已接入 OpenProject 实例 ${config.baseUrl}，工具名以 openproject_ 开头。`,
+        config.label ? `## OpenProject 项目管理（${config.label}）` : '## OpenProject 项目管理',
+        `${config.label ? `本区块对应实例「${config.label}」，` : ''}已接入 OpenProject 实例 ${config.baseUrl}，`
+        + `工具名以 ${toolNamePrefix} 开头。`,
         '用它们管理项目、工作包（任务/缺陷/里程碑）、工时、成员角色、版本与附件。',
         '引用资源时可以直接使用人类可读的名字（项目名、状态名、负责人姓名、版本名），插件会在服务端解析；'
         + '解析出现歧义时工具会返回候选列表。',
         '先读后写：不确定状态、类型或成员时，先用对应的 list 工具获取字典，再执行写入。',
         '写入前如需预览，可给创建工作包/修改工作包传 dryRun: true，让服务端校验而不落库。',
+        ...(config.toolPrefix
+          ? ['同时配置了多个 OpenProject 实例时，各实例的工具名前缀不同：请按用户提到的组织、公司或项目所属'
+            + `选择对应前缀的工具（本实例为 ${toolNamePrefix}），不要跨实例混用，也不要把一个实例的工作包 ID 用到另一个实例。`]
+          : []),
         mode,
       ].join(' ');
     },
@@ -234,6 +328,8 @@ export function apply(ctx, rawConfig) {
 
   logger?.info?.('[openproject] 插件已激活', {
     baseUrl: config.baseUrl,
+    label: config.label,
+    toolPrefix: config.toolPrefix,
     readOnly: guard.readOnly,
     writeProjects: config.writeProjects,
   });

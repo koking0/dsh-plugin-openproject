@@ -3,6 +3,39 @@
 本文件的格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-10-12
+
+### 新增
+
+- **多实例支持**：同一个 profile 可以同时接入多个 OpenProject（例如「实验室」与
+  「速知启智」），在 profile 补丁里用不同的 `id` 插入多条本插件即可。新增两个配置项：
+  - `toolPrefix`：工具名前缀（如 `lab_`），本实例的 `openproject_list_projects` 会注册成
+    `lab_list_projects`，从而与其它实例共存；填 `lab` 会自动补成 `lab_`，形状非法时
+    **直接报错**（静默忽略会导致同名工具互相覆盖，比加载失败更难排查）。
+  - `label`：实例名称（如「实验室」），出现在系统提示词与每个工具描述的前缀里
+    （`[实验室] 列出……`），让模型按用户提到的组织选对实例。实例地址是 IP 或域名时，
+    模型光看地址认不出是哪个组织，建议配合 `label` 使用。
+- `openproject_whoami` 在配置了 `label` / `toolPrefix` 时会一并回显，便于人工确认
+  当前打到的是哪个实例。
+- 每个实例的 `readOnly` / `writeProjects` / `requireConfirmForWrites` / Token 来源
+  （`token` / `tokenFile` / `credentialRef`）独立生效。
+
+### 兼容性
+
+- 未配置 `label` / `toolPrefix` 时行为与 1.0.0 完全一致：工具名仍是 `openproject_*`，
+  系统提示词区块名仍是 `plugin:openproject`。单实例用法无需改动任何配置。
+
+### 实现说明
+
+- 前缀在**注册边界**上逐条改写工具定义（`instanceContext()`），因此没有改动
+  `lib/tools/*` 里的 35 处注册调用，工具模块保持原样。
+- 已发布包的模块只会求值一次、多个实例**共享同一个 ESM 模块**，所以前缀刻意不放在
+  模块级变量里（会互相串台），而是通过包装后的上下文逐实例传递。
+- 系统提示词区块名按前缀区分（`plugin:openproject:<前缀>`）：区块名相同时，后注册的
+  实例会覆盖前一个的文案，导致模型只看到其中一个实例。
+- 工具模块只用到 `ctx.tools.register`，因此包装后的上下文用原型链转发其余属性，
+  将来若工具模块需要 `ctx` 上的其它能力也不会失效。
+
 ## [1.0.0] - 2026-10-07
 
 首个公开发布版本。
