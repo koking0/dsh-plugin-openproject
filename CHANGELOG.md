@@ -3,6 +3,39 @@
 本文件的格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-10-16
+
+本版把包从「只服务 DSH 的插件」扩成「一个包、三种接入方式」：DSH 原生插件、MCP Server、
+CLI，三者共享同一套零依赖 API 层。**DSH 插件本身的行为与工具名没有任何变化。**
+
+### 新增
+
+- **MCP Server（`mcp/server.js`、`bin/openproject-mcp.js`）**：零依赖 stdio MCP 服务，
+  手写 JSON-RPC 2.0（`initialize` / `tools/list` / `tools/call` / `ping`），16 个工具
+  `op_*`。可接入 WorkBuddy、Claude Desktop、Claude Code、Cursor 等任意 MCP 客户端；
+  `initialize` 会回显已配置实例名与配置文件路径，便于排查「到底连的哪个实例」。
+- **CLI（`cli/openproject.js`、`bin/openproject.js`）**：16 条命令（`instances` / `whoami` /
+  `projects` / `wp-list` / `wp-get` / `wp-create` / `wp-update` / `wp-comment` / `wp-delete` /
+  `time-list` / `time-log` / `members` / `versions` / `dict` / `users` / `raw`），适合脚本与 CI；
+  模块本身可被 import（导出 `run` / `commands` / `loadConfig` / `configPath` / `main`），MCP
+  服务就是复用它。
+- **多实例配置 `op.config.example.json`**：查找顺序为 `OPENPROJECT_CONFIG` 环境变量 →
+  `~/.openproject/op.config.json` → 当前目录 `op.config.json`；一个配置文件都没有时，退回
+  `OPENPROJECT_BASE_URL` + `OPENPROJECT_API_TOKEN` 环境变量的单实例模式，容器/CI 里可直接用。
+- MCP 工具参数支持两种写法：命令参数放 `args` 对象，或与 `instance` 平铺同级；`instance`
+  在已配置实例时会带上 `enum`，客户端下拉即可选。
+
+### 变更
+
+- `package.json`：新增 `bin`（`openproject`、`openproject-mcp`）与 `exports`（`./cli`、`./mcp`），
+  `files` 纳入 `cli/`、`mcp/`、`bin/`、`op.config.example.json`；关键词补充 `mcp`、`cli`、
+  `workbuddy` 等。
+- `.gitignore` 忽略真实配置 `op.config.json` 与 `*.token`，避免 API Token 误提交。
+
+### 兼容性
+
+- 安装方式、配置项、36 个工具名与行为均与 1.1.0 一致，纯增量发布。
+
 ## [1.1.0] - 2026-10-12
 
 ### 新增

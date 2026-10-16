@@ -1,7 +1,8 @@
 name: Publish to npm
 
-# 打 tag 即发布：git tag v1.0.0 && git push origin v1.0.0
-# 需要先在仓库 Secrets 里配置 NPM_TOKEN（npm 的 Automation Token）。
+# 打 tag 即发布：git tag v1.2.0 && git push origin v1.2.0
+# 需要在仓库 Secrets 里配置 NPM_TOKEN（npm 的 Automation Token）；
+# 没配也不影响 —— 这一跳会打 warning 并跳过，tag / Release 照常建立。
 on:
   push:
     tags:
@@ -23,14 +24,24 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      # 本插件零运行时依赖，无需 npm install 即可校验
+      # 本包零运行时依赖，无需 npm install 即可校验
       - name: Syntax check
-        run: node --check index.js
+        run: |
+          node --check index.js
+          node --check cli/openproject.js
+          node --check mcp/server.js
+          node --check bin/openproject.js
+          node --check bin/openproject-mcp.js
 
       - name: Show tarball contents
         run: npm pack --dry-run
 
       - name: Publish
-        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::未配置 NPM_TOKEN secret，跳过 npm 发布。配置后可在 Actions 里手动 workflow_dispatch，或本地 npm publish。"
+            exit 0
+          fi
+          npm publish --access public --provenance

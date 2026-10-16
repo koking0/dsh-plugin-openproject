@@ -1,12 +1,17 @@
 {
   "name": "@liu_zhao_feng_alex/dsh-plugin-openproject",
-  "version": "1.1.0",
-  "description": "DeepSeek Harness plugin for OpenProject — manage projects, work packages, time tracking, members, versions and attachments from chat. 36 Chinese-localized tools, zero runtime dependencies.",
+  "version": "1.2.0",
+  "description": "OpenProject for AI agents — a DeepSeek Harness native plugin (36 Chinese-localized tools) that also ships a zero-dependency MCP server and a multi-instance CLI. Projects, work packages, time tracking, members, versions and attachments. Zero runtime dependencies.",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
     "dsh",
     "openproject",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "cli",
+    "workbuddy",
     "project-management",
     "work-packages",
     "time-tracking",
@@ -26,17 +31,27 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "bin": {
+    "openproject": "./bin/openproject.js",
+    "openproject-mcp": "./bin/openproject-mcp.js"
+  },
   "exports": {
     ".": "./index.js",
+    "./cli": "./cli/openproject.js",
+    "./mcp": "./mcp/server.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "index.js",
     "lib/",
+    "cli/",
+    "mcp/",
+    "bin/",
     "locale/",
     "icon.svg",
     "cordis.patch.yml",
+    "op.config.example.json",
     "README.md",
     "CHANGELOG.md"
   ],

@@ -1,0 +1,26 @@
+{
+  "_说明": [
+    "多实例配置文件：复制为 ~/.openproject/op.config.json（或当前目录 ./op.config.json，或用 OPENPROJECT_CONFIG 指定路径）。",
+    "instances 下可配任意多个实例，用「openproject <实例名> <命令>」或 MCP 的 instance 参数指定打到哪个实例。",
+    "Token 只放在这个文件里，别写进代码或提交到 Git；本文件已列在 .gitignore。"
+  ],
+  "default": "lab",
+  "instances": {
+    "lab": {
+      "label": "实验室",
+      "baseUrl": "https://openproject.example.com",
+      "token": "在这里填 API Token（OpenProject：我的账号 → 访问令牌 → API）",
+      "rejectUnauthorized": false,
+      "timeoutMs": 30000,
+      "defaultPageSize": 25,
+      "maxPageSize": 100,
+      "hoursPerDay": 8
+    },
+    "company": {
+      "label": "公司",
+      "baseUrl": "https://op.company.example.com",
+      "token": "",
+      "rejectUnauthorized": false
+    }
+  }
+}

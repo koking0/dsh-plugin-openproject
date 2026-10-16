@@ -1,17 +1,20 @@
 # @liu_zhao_feng_alex/dsh-plugin-openproject
 
-把 **OpenProject** 接进 [DeepSeek Harness](https://www.deepseek.com/)（DSH）的原生插件：
-36 个中文工具，让你直接**用对话管理项目、工作包、工时、成员、版本与附件**。
+把 **OpenProject** 交给 AI Agent 的一个包，三种用法共享同一套零依赖 API 层：
 
-- 🧩 **原生 DSH 插件** —— 不是 MCP 转发，工具直接注册进 DSH 工具表
+- 🧩 **DSH 原生插件** —— [DeepSeek Harness](https://www.deepseek.com/) 的 36 个中文工具，直接注册进工具表
+- 🔌 **MCP Server** —— 零依赖 stdio 服务，WorkBuddy / Claude Desktop / Claude Code / Cursor 等任意 MCP 客户端可用
+- ⌨️ **CLI** —— 一条命令读写，脚本与 CI 友好
+
+> 本包**不预设任何 OpenProject 实例地址**，适用于任意自建或云端部署，装好后按下方
+> 「配置」一节填上你自己的地址与 Token 即可。
+
 - 📦 **零运行时依赖** —— 只用 Node 内置模块，HTTP 走 `node:https`，可精确控制自签名证书
 - 🀄 **全中文工具与输出** —— 工具名、描述、渲染结果都按 OpenProject 中文界面术语对齐
 - 🧠 **服务端名字解析** —— 项目名、状态名、负责人姓名、版本名都可直接传，歧义时返回候选
 - 🛡️ **三层写入保护** —— 全局只读 → 项目白名单 → 删除强制二次确认
 - 🔍 **先预览后写入** —— 创建工作包/修改工作包支持 `dryRun`，先看服务端校验结果
-
-> 本插件**不预设任何 OpenProject 实例地址**，适用于任意自建或云端部署，装好后按下方
-> 「配置」一节填上你自己的地址与 Token 即可。
+- 🧵 **多实例** —— 一套配置同时接多个 OpenProject，用实例名指定打到哪个
 
 > 为什么不用官方 MCP？OpenProject 官方 MCP 是 Enterprise 付费功能，Community Edition 上
 > `/mcp` 会返回 `MCP server is not available.`。社区 MCP 服务器（如 `openproject-ce-mcp`）
@@ -19,7 +22,19 @@
 
 ---
 
-## 安装
+## 三种接入方式
+
+| 方式 | 适合 | 入口 | 工具数 |
+|---|---|---|---|
+| [DSH 原生插件](#安装dsh-原生插件) | 用 DeepSeek Harness | `@liu_zhao_feng_alex/dsh-plugin-openproject` | 36 个原生工具 |
+| [MCP Server](#mcp-serverworkbuddy--claude--cursor) | WorkBuddy、Claude、Cursor、Continue… | `openproject-mcp` | 16 个 MCP 工具 |
+| [CLI](#cli) | 脚本 / CI / 不想装任何东西 | `openproject <实例名> <命令>` | 16 条命令 |
+
+三者的实例配置是同一份（见「配置」一节）；MCP 与 CLI 额外支持 `op.config.json` 多实例写法。
+
+---
+
+## 安装（DSH 原生插件）
 
 ### 1. 让 DSH 的 Agent 装（最省事）
 
@@ -208,6 +223,119 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 
 ---
 
+# MCP Server（WorkBuddy / Claude / Cursor…）
+
+本包自带一个**零依赖 stdio MCP 服务**：不用 DSH，任何支持 MCP 的客户端都能接上。
+
+## 第一步：写实例配置
+
+MCP 与 CLI 共用一份多实例配置，按以下顺序查找（先命中先用）：
+
+1. 环境变量 `OPENPROJECT_CONFIG` 指向的文件
+2. `~/.openproject/op.config.json`
+3. 当前工作目录下的 `op.config.json`
+
+把仓库里的 `op.config.example.json` 复制到上面任一位置，填好 `instances` 与 `default` 即可。
+一个实例都不想建文件时，也可以只用两个环境变量（等同单实例）：
+
+| 环境变量 | 说明 |
+|---|---|
+| `OPENPROJECT_BASE_URL` | 实例地址，例如 `https://openproject.example.com` |
+| `OPENPROJECT_API_TOKEN` | API Token |
+| `OPENPROJECT_REJECT_UNAUTHORIZED` | 只有显式设成 `true` 才校验证书；自签名实例保持默认（不校验） |
+
+## 第二步：加进 MCP 客户端
+
+通用写法（用 npx 拉起，无需全局安装）：
+
+```json
+{
+  "mcpServers": {
+    "openproject": {
+      "command": "npx",
+      "args": ["-y", "-p", "@liu_zhao_feng_alex/dsh-plugin-openproject", "openproject-mcp"],
+      "env": { "OPENPROJECT_CONFIG": "/绝对路径/op.config.json" }
+    }
+  }
+}
+```
+
+也可以先 `npm i -g @liu_zhao_feng_alex/dsh-plugin-openproject`，然后把 `command` 写成 `openproject-mcp`。
+
+### WorkBuddy
+
+WorkBuddy 实际读取的是 `~/.workbuddy/connectors/default/mcp.json`（往 `~/.workbuddy/mcp.json` 里写是**不生效**的），在 `mcpServers` 下加一项：
+
+```json
+{
+  "mcpServers": {
+    "openproject": {
+      "command": "node",
+      "args": [
+        "--no-warnings",
+        "C:/Users/<你>/AppData/Roaming/npm/node_modules/@liu_zhao_feng_alex/dsh-plugin-openproject/mcp/server.js"
+      ],
+      "env": { "OPENPROJECT_CONFIG": "C:/Users/<你>/.openproject/op.config.json" }
+    }
+  }
+}
+```
+
+`--no-warnings` 用来屏蔽自签名证书实例的 TLS 告警（只是告警，不影响功能）。改完重启客户端，让 Agent 调一次 `op_instances` / `op_whoami` 验证。
+
+## MCP 工具一览（16 个）
+
+| 工具 | 说明 |
+|---|---|
+| `op_instances` | 列出已配置的实例 |
+| `op_whoami` | 检查连通性，返回当前账号与实例地址 |
+| `op_projects` | 列出 / 按关键字搜索项目 |
+| `op_wp_list` | 查询工作包（项目、状态、负责人、类型、版本、超期、关键字、排序） |
+| `op_wp_get` | 查看工作包详情（含描述、父子、预估与已投入工时） |
+| `op_wp_create` / `op_wp_update` | 新建 / 更新工作包，支持 `dry=true` 先看服务端校验结果 |
+| `op_wp_comment` | 给工作包加评论 |
+| `op_wp_delete` | 删除工作包，**必须** `confirm=true` |
+| `op_time_list` / `op_time_log` | 查询 / 登记工时 |
+| `op_members` / `op_versions` / `op_dict` / `op_users` | 项目成员、版本、字典（状态/类型/优先级/活动/角色）、用户 |
+| `op_raw` | 直接打 OpenProject API，兜底用 |
+
+参数写法很宽松：`instance` 选实例（省略则用默认实例），命令参数既可以放在 `args` 对象里
+（`{"instance":"lab","args":{"project":"示例项目"}}`），也可以与 `instance` 平铺同级
+（`{"instance":"lab","project":"示例项目"}`）。
+
+命令行自测（不需要任何客户端）：
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | node mcp/server.js
+```
+
+---
+
+# CLI
+
+不想装 MCP、也不想开 DSH 时，直接一条命令：
+
+```bash
+npm i -g @liu_zhao_feng_alex/dsh-plugin-openproject
+
+openproject instances                                           # 列出实例
+openproject lab projects --q=测试 --limit=20                     # 搜项目
+openproject lab wp-list --project=示例项目 --status=open --limit=20
+openproject studio wp-create --json='{"project":"示例项目","subject":"联调发现的 bug"}'
+openproject studio wp-update --id=123 --status=进行中 --progress=50
+openproject lab time-log --wp=123 --hours=2 --comment="本地联调"
+openproject lab raw --path=/api/v3/users/me                     # 兜底直打 API
+```
+
+不装全局也行：`node <包目录>/bin/openproject.js <实例名> <命令>`。
+
+- 写入类命令支持 `--dry=true` 预览；删除必须 `--confirm=true`。
+- Windows 控制台会把中文参数转码，长文本/中文建议写进 UTF-8 的 JSON 文件后用 `--json-file=x.json` 传入。
+- 配置查找顺序与 MCP 完全一致（见上一节）。
+
+---
+
 ## 工具清单（36 个）
 
 > 下表按默认前缀 `openproject_` 列出。用[方式 D](#方式-d同时接入多个实例多实例)配置
@@ -298,9 +426,12 @@ OPENPROJECT_API_TOKEN=opapi-xxxxxxxx
 ```bash
 git clone https://github.com/koking0/dsh-plugin-openproject.git
 cd dsh-plugin-openproject
-# 无需安装依赖：本插件零运行时依赖
-node --check index.js    # 语法检查
-npm pack --dry-run       # 查看将发布的文件清单
+# 无需安装依赖：本包零运行时依赖
+node --check index.js              # 插件校验
+node --check cli/openproject.js
+node --check mcp/server.js
+node bin/openproject.js help       # CLI 自测（不需要任何配置就能看命令列表）
+npm pack --dry-run                 # 查看将发布的文件清单
 ```
 
 目录结构：
@@ -308,6 +439,11 @@ npm pack --dry-run       # 查看将发布的文件清单
 ```
 index.js              插件入口：配置归一化、Token 解析、工具注册、系统提示词区块
 cordis.patch.yml      bundle 补丁：向 profile 插入一条 Host 插件行
+cli/openproject.js    CLI 与命令层：16 条命令，可被 MCP 复用（导出 run/commands/main）
+mcp/server.js         零依赖 stdio MCP Server：手写 JSON-RPC，16 个工具
+bin/openproject.js    CLI 可执行入口
+bin/openproject-mcp.js MCP 可执行入口
+op.config.example.json 多实例配置示例（真实配置 op.config.json 已 gitignore）
 lib/http.js           零依赖 HTTP 客户端（node:http/node:https、multipart、下载）
 lib/api.js            OpenProject API 层：鉴权、分页、HAL、名字解析、字典缓存
 lib/guard.js          写入保护
@@ -319,7 +455,8 @@ lib/tools/*.js        按能力域拆分的工具定义（含内联的 defineToo
 
 ```bash
 npm publish --access public
-# 或打 tag 由 GitHub Actions 自动发布：git tag v1.0.1 && git push origin v1.0.1
+# 或打 tag 由 GitHub Actions 自动发布（需在仓库 Secrets 里配 NPM_TOKEN）：
+git tag v1.2.0 && git push origin v1.2.0
 ```
 
 ## 许可
